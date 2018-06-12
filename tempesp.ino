@@ -7,12 +7,13 @@ extern "C" {
 
 #include "./secrets.h"
 
-int pinDHT = 4;
+int pinDHT = 2;
 SimpleDHT22 dht;
 
 struct DhtData {
   float temp;
   float hum;
+  float vbat;
 } _dht_data;
 
 struct Uptime {
@@ -71,6 +72,14 @@ int readDht(struct DhtData *data) {
   return 0;
 }
 
+const float BATTERY_DIVIDER = 5.0; // Division done by voltage divider circuit
+const float VOLTAGE_CALIBRATION = 0.965; // ADC reading error
+float readBattery() {
+  float vbat = analogRead(A0) * BATTERY_DIVIDER * VOLTAGE_CALIBRATION / 1000;
+  Serial.println("Battery voltage" + String(vbat));
+  return vbat;
+}
+
 int sendMeasurement(struct DhtData *data) {
   WiFiClient client;
   const char* host = "api.thingspeak.com";
@@ -87,7 +96,7 @@ int sendMeasurement(struct DhtData *data) {
   }
 
   // Send over HTTP to api.thingspeak.com
-  String params = "?apikey=" + String(TS_API_KEY) + "&field1=" + String(data->temp) + "&field2=" + String(data->hum);
+  String params = "?apikey=" + String(TS_API_KEY) + "&field1=" + String(data->temp) + "&field2=" + String(data->hum) + "&field3=" + String(data->vbat);
   if (resetReason != "Deep-Sleep Wake") {
     params += "&status=reset";
   }
@@ -147,6 +156,10 @@ int doLoop() {
     unsigned long currentUptime = uptimeSeconds(&uptime);
     Serial.println("Woke up: " + String(currentUptime) + ", Next Send: " + String(nextSend));
 
+    // DHT22 and battery level read are unreliable immediately after reset
+    delay(2000);
+    newData.vbat = readBattery();
+    
     if (readDht(&newData)) {
       Serial.println("Failed to measure");
       return 1;
