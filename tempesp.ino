@@ -24,7 +24,7 @@ DhtData oldData;
 DhtData newData;
 Uptime uptime;
 unsigned long nextSend = 0;
-uint32_t sendAfterSleeps = 12;
+uint32_t sendAfterSleeps = 0;
 String resetReason = ESP.getResetReason();
 
 int connectWifi();
@@ -165,6 +165,7 @@ int doLoop() {
       sendAfterSleeps = 12; // Send every 1 hour at minimum
     }
     oldData = newData;
+    sendAfterSleeps--;
     return 0;
 }
 
@@ -182,11 +183,11 @@ void doSleep() {
 }
 
 void doDeepSleep() {
-  sendAfterSleeps--;
   Serial.println(String("Going to deep sleep: ") + String(sendAfterSleeps));
   //ESP.rtcUserMemoryWrite(0, &(unsigned int*)oldData, sizeof(oldData));
   ESP.rtcUserMemoryWrite(0, &sendAfterSleeps, sizeof(sendAfterSleeps));
   ESP.rtcUserMemoryWrite(1, (uint32_t *)&oldData, sizeof(oldData));
+
 
   ESP.deepSleep(sleepTime * 1000);
 }
