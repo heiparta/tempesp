@@ -60,15 +60,12 @@ int connectWifi() {
 }
 
 int readDht(struct DhtData *data) {
-  byte temp = 0;
-  byte hum = 0;
+
   int err = SimpleDHTErrSuccess;
-  if ((err = dht.read(pinDHT, &temp, &hum, NULL)) != SimpleDHTErrSuccess) {
+  if ((err = dht.read2(pinDHT, &(data->temp), &(data->hum), NULL)) != SimpleDHTErrSuccess) {
     Serial.print("Read DHT failed: " + String(err)) ;
     return 1;
   }
-  data->temp = (float)temp;
-  data->hum = (float)hum;
   return 0;
 }
 
@@ -165,7 +162,7 @@ int doLoop() {
       return 1;
     }
     Serial.println("Measured: " + String(newData.temp));
-    if (oldData.temp != newData.temp || sendAfterSleeps <= 0) {
+    if (abs(oldData.temp - newData.temp) >= 0.5 || sendAfterSleeps <= 0) {
       // Data changed, try sending it
       if (connectWifi()) {
         Serial.println("Failed to connect to WiFi");
@@ -175,14 +172,14 @@ int doLoop() {
         Serial.println("Failed to send measurement");
         return 1;
       }
-      sendAfterSleeps = 12; // Send every 1 hour at minimum
+      sendAfterSleeps = 12; // Send every 2 hour at minimum
     }
     oldData = newData;
     sendAfterSleeps--;
     return 0;
 }
 
-int sleepTime = 300 * 1000;
+int sleepTime = 600 * 1000;
 void doSleep() {
   //if (ALWAYS_DISCONNECT) {
   //  WiFi.disconnect();
