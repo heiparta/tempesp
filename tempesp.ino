@@ -1,39 +1,39 @@
+#include "config.h"
 
 #include <ESP8266WiFi.h>
-#include <SimpleDHT.h>
+
 extern "C" {
 #include "user_interface.h"
 }
 
-#include "./secrets.h"
 
-String UNITNAME = "makuuhuone";
+#include "common.h"
+#include "secrets.h"
 
-int pinDHT = 2;
-SimpleDHT22 dht;
-
-struct DhtData {
-  float temp;
-  float hum;
-  float vbat;
-} _dht_data;
+#ifdef USE_DHT
+#include "dht.h"
+#endif
+#ifdef USE_DHS18B20
+#include "ds18b20.h"
+#endif
 
 struct Uptime {
   unsigned long lastMicros;
   unsigned long overflows;
 } _uptime;
 
-DhtData oldData;
-DhtData newData;
+SensorData oldData;
+SensorData newData;
 Uptime uptime;
 unsigned long nextSend = 0;
 uint32_t sendAfterSleeps = 0;
 String resetReason = ESP.getResetReason();
 
 int connectWifi();
-int readDht(struct DhtData *data);
-int sendMeasurement(struct DhtData *data);
+int readDht(struct SensorData *data);
+int sendMeasurement(struct SensorData *data);
 unsigned long uptimeSeconds(struct Uptime *up);
+
 
 int connectWifi() {
   // IPAddress ip(192, 168, 71, 28);
@@ -61,15 +61,6 @@ int connectWifi() {
   return 0;
 }
 
-int readDht(struct DhtData *data) {
-
-  int err = SimpleDHTErrSuccess;
-  if ((err = dht.read2(pinDHT, &(data->temp), &(data->hum), NULL)) != SimpleDHTErrSuccess) {
-    Serial.print("Read DHT failed: " + String(err)) ;
-    return 1;
-  }
-  return 0;
-}
 
 const float BATTERY_DIVIDER = 5.0; // Division done by voltage divider circuit
 const float VOLTAGE_CALIBRATION = 0.965; // ADC reading error
@@ -80,7 +71,7 @@ float readBattery() {
 }
 
 
-int sendInfluxDb(struct DhtData *data) {
+int sendInfluxDb(struct SensorData *data) {
   WiFiClient client;
   const char* host = "192.168.8.64";
   if (client.connect(host, 8086))
@@ -120,7 +111,7 @@ int sendInfluxDb(struct DhtData *data) {
   return 0;
 }
 
-int sendThingspeak(struct DhtData *data) {
+int sendThingspeak(struct SensorData *data) {
   WiFiClient client;
   const char* host = "api.thingspeak.com";
   if (client.connect(host, 80))
@@ -171,7 +162,7 @@ void setup() {
 
   Serial.println("Reset reason: " + resetReason);
 
-  memset(&oldData, 0, sizeof(DhtData));
+  memset(&oldData, 0, sizeof(SensorData));
   if (resetReason == "Deep-Sleep Wake") {
     ESP.rtcUserMemoryRead(0, &sendAfterSleeps, sizeof(sendAfterSleeps));
     ESP.rtcUserMemoryRead(1, (uint32_t *)&oldData, sizeof(oldData));
@@ -180,7 +171,7 @@ void setup() {
   Serial.println("Sleep cycles left:" + String(sendAfterSleeps));
   Serial.println("Old temp:" + String(oldData.temp));
 
-  memset(&newData, 0, sizeof(DhtData));
+  memset(&newData, 0, sizeof(SensorData));
   memset(&uptime, 0, sizeof(Uptime));
 }
 
@@ -200,7 +191,7 @@ int doLoop() {
     delay(2000);
     newData.vbat = readBattery();
     
-    if (readDht(&newData)) {
+    if (readSensor(&newData)) {
       Serial.println("Failed to measure");
       return 1;
     }
@@ -222,7 +213,9 @@ int doLoop() {
     return 0;
 }
 
-int sleepTime = 600 * 1000;
+//int sleepTime = 600 * 1000;
+int sleepTime = 10 * 1000;
+
 void doSleep() {
   //if (ALWAYS_DISCONNECT) {
   //  WiFi.disconnect();
@@ -242,6 +235,7 @@ void doDeepSleep() {
   ESP.rtcUserMemoryWrite(1, (uint32_t *)&oldData, sizeof(oldData));
 
 
+int a = readSensor(&newData);
   ESP.deepSleep(sleepTime * 1000);
 }
 
