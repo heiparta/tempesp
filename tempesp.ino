@@ -7,6 +7,8 @@ extern "C" {
 
 #include "./secrets.h"
 
+String UNITNAME = "makuuhuone";
+
 int pinDHT = 2;
 SimpleDHT22 dht;
 
@@ -77,7 +79,48 @@ float readBattery() {
   return vbat;
 }
 
-int sendMeasurement(struct DhtData *data) {
+
+int sendInfluxDb(struct DhtData *data) {
+  WiFiClient client;
+  const char* host = "192.168.8.64";
+  if (client.connect(host, 8086))
+  {
+    // we are connected to the host!
+    Serial.println("Connected to host");
+  }
+  else
+  {
+    // connection failure
+    Serial.println("Connection error");
+    return 1;
+  }
+
+  // Send over HTTP to api.thingspeak.com
+  String query = "?db=dbtemp";
+  String params = "tempdata,host=" + String(UNITNAME) + " temp=" + String(data->temp) + ",hum=" + String(data->hum) + ",vbat=" + String(data->vbat);
+  if (resetReason != "Deep-Sleep Wake") {
+    params += ",status=\"reset\"";
+  }
+  client.print(String("POST /write") + query + " HTTP/1.1\r\n" +
+             "Host: " + host + "\r\n" +
+             "Connection: close\r\n" +
+             "Content-Length: " + String(params.length()) + "\r\n" +
+             "\r\n" + 
+             params
+            );
+
+  while (client.connected()) {
+    if (client.available())
+    {
+      String line = client.readStringUntil('\n');
+      Serial.println(line);
+    }
+  }
+  client.stop();
+  return 0;
+}
+
+int sendThingspeak(struct DhtData *data) {
   WiFiClient client;
   const char* host = "api.thingspeak.com";
   if (client.connect(host, 80))
@@ -168,7 +211,7 @@ int doLoop() {
         Serial.println("Failed to connect to WiFi");
         return 1;
       }
-      if (sendMeasurement(&newData)) {
+      if (sendInfluxDb(&newData)) {
         Serial.println("Failed to send measurement");
         return 1;
       }
