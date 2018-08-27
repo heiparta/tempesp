@@ -1,5 +1,4 @@
 #include "config.h"
-
 #include <ESP8266WiFi.h>
 
 extern "C" {
@@ -11,10 +10,10 @@ extern "C" {
 #include "secrets.h"
 
 #ifdef USE_DHT
-#include "dht.h"
+  #include "dht.h"
 #endif
-#ifdef USE_DHS18B20
-#include "ds18b20.h"
+#ifdef USE_DS18B20
+  #include "ds18b20.h"
 #endif
 
 struct Uptime {
@@ -63,7 +62,6 @@ int connectWifi() {
 
 
 const float BATTERY_DIVIDER = 5.0; // Division done by voltage divider circuit
-const float VOLTAGE_CALIBRATION = 0.965; // ADC reading error
 float readBattery() {
   float vbat = analogRead(A0) * BATTERY_DIVIDER * VOLTAGE_CALIBRATION / 1000;
   Serial.println("Battery voltage" + String(vbat));
@@ -86,9 +84,11 @@ int sendInfluxDb(struct SensorData *data) {
     return 1;
   }
 
-  // Send over HTTP to api.thingspeak.com
   String query = "?db=dbtemp";
-  String params = "tempdata,host=" + String(UNITNAME) + " temp=" + String(data->temp) + ",hum=" + String(data->hum) + ",vbat=" + String(data->vbat);
+  String params = "tempdata,host=" + String(UNITNAME) + " temp=" + String(data->temp) + ",vbat=" + String(data->vbat);
+  if (data->hum >= 0) {
+    params += ",hum=" + String(data->hum);
+  }
   if (resetReason != "Deep-Sleep Wake") {
     params += ",status=\"reset\"";
   }
@@ -172,7 +172,10 @@ void setup() {
   Serial.println("Old temp:" + String(oldData.temp));
 
   memset(&newData, 0, sizeof(SensorData));
+  newData.hum = -42;
   memset(&uptime, 0, sizeof(Uptime));
+
+  initSensor();
 }
 
 int ALWAYS_DISCONNECT = 1;
@@ -213,8 +216,8 @@ int doLoop() {
     return 0;
 }
 
-//int sleepTime = 600 * 1000;
-int sleepTime = 10 * 1000;
+int sleepTime = 600 * 1000;
+//int sleepTime = 60 * 1000;
 
 void doSleep() {
   //if (ALWAYS_DISCONNECT) {
@@ -234,8 +237,6 @@ void doDeepSleep() {
   ESP.rtcUserMemoryWrite(0, &sendAfterSleeps, sizeof(sendAfterSleeps));
   ESP.rtcUserMemoryWrite(1, (uint32_t *)&oldData, sizeof(oldData));
 
-
-int a = readSensor(&newData);
   ESP.deepSleep(sleepTime * 1000);
 }
 

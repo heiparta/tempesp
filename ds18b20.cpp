@@ -1,14 +1,23 @@
+#include "config.h"
 #ifdef USE_DS18B20
 
-int readSensor() {
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
-  OneWire oneWire(SENSORPIN);
-  DallasTemperature sensors(&oneWire);
+#include "common.h"
+#include "ds18b20.h"
 
+OneWire oneWire(SENSORPIN);
+DallasTemperature sensors(&oneWire);
+  
+int initSensor() {
+  sensors.begin();
+}
+
+int readSensor(struct SensorData *data) {
   sensors.requestTemperatures();
-  int temp = sensors.getTempCByIndex();
-  Serial.println("Got temp:" + String(temp));
-  return temp;
+  data->temp = sensors.getTempCByIndex(0);
+  return 0;
 }
   
 #endif
