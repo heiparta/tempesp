@@ -4,8 +4,6 @@
 
 #include "common.h"
 
-#define SENSORPIN 2
-
 int initSensor();
 int readSensor(struct SensorData *data);
 
