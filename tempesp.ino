@@ -1,4 +1,4 @@
-#include "config.h"
+ #include "config.h"
 #include <ESP8266WiFi.h>
 
 extern "C" {
@@ -26,6 +26,7 @@ SensorData newData;
 Uptime uptime;
 unsigned long nextSend = 0;
 uint32_t sendAfterSleeps = 0;
+uint32_t failures = 0;
 String resetReason = ESP.getResetReason();
 
 int connectWifi();
@@ -166,6 +167,8 @@ void setup() {
   if (resetReason == "Deep-Sleep Wake") {
     ESP.rtcUserMemoryRead(0, &sendAfterSleeps, sizeof(sendAfterSleeps));
     ESP.rtcUserMemoryRead(1, (uint32_t *)&oldData, sizeof(oldData));
+    ESP.rtcUserMemoryRead(2, &failures, sizeof(failures));
+
   }
 
   Serial.println("Sleep cycles left:" + String(sendAfterSleeps));
@@ -219,29 +222,27 @@ int doLoop() {
 int sleepTime = 600 * 1000;
 //int sleepTime = 60 * 1000;
 
-void doSleep() {
-  //if (ALWAYS_DISCONNECT) {
-  //  WiFi.disconnect();
-  //}
-  Serial.println("Going to sleep");
-  int res = 0;
-  WiFi.forceSleepBegin();
-  Serial.println(String("Sleep2 ") + res);
-  delay(sleepTime);
-  WiFi.forceSleepWake();
-}
-
 void doDeepSleep() {
-  Serial.println(String("Going to deep sleep: ") + String(sendAfterSleeps));
+  Serial.println(String("Going to deep sleep: ") + String(sendAfterSleeps) + "/" + String(failures));
   //ESP.rtcUserMemoryWrite(0, &(unsigned int*)oldData, sizeof(oldData));
   ESP.rtcUserMemoryWrite(0, &sendAfterSleeps, sizeof(sendAfterSleeps));
   ESP.rtcUserMemoryWrite(1, (uint32_t *)&oldData, sizeof(oldData));
+  ESP.rtcUserMemoryWrite(2, &failures, sizeof(failures));
 
-  ESP.deepSleep(sleepTime * 1000);
+  ESP.deepSleep(sleepTime * 1000 * (failures ? failures : 1));
 }
 
 void loop() {
-  doLoop();
-  //doSleep();
+  int failed = doLoop();
+
+  // Store the number of failures and increase the sleep time up to 10 times the normal sleep time
+  if (failed) {
+    failures++;
+    if (failures > 10) {
+      failures = 10;
+    }
+  } else {
+    failures = 0;
+  }
   doDeepSleep();
 }
